@@ -164,11 +164,11 @@ class TableDetector:
 
     TABLE_TYPE_NAME = "table"
 
-    MIN_TABLE_WIDTH = 200
+    MIN_TABLE_WIDTH = 350
     """The minimum valid table width, used for dropping irregular table detections"""
     MIN_TABLE_OVERLAPPING = 0.25
     """The minimum overlapping index for two tables to merge them"""
-    MIN_DOCKET_TABLE_WIDTH = 490
+    MIN_DOCKET_TABLE_WIDTH = 420
     """Threshold for descriminating main docket table or receipt table."""
     MIN_ROW_HEIGHT = 5
     """The minimum row_height, used for separating different rows"""
@@ -255,7 +255,7 @@ class TableDetector:
         """
         if table.width <= self.MIN_DOCKET_TABLE_WIDTH:
             # If it's a receipt table, we don't generate any columns
-            return [table.block]
+            return []
         else:
             vertical_lines = detect_vertical_lines(table_image)
             if vertical_lines is None:
@@ -378,7 +378,7 @@ class TableDetector:
 
         all_tables = {}
         for idx, tables in table_region_proposals.items():
-            page_tokens = pdf_page_tokens[idx]["token"]
+            page_tokens = pdf_page_tokens[idx]["tokens"]
             page_image = pdf_images[idx]
 
             all_tables[idx] = self.detect_table_from_pdf_page(
