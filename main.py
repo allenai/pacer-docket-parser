@@ -179,6 +179,9 @@ class TableDetector:
     FOOTER_HEIGHT = 15
     """The height of headers, used for trimming table proposal detections"""
 
+    GAP_BETWEEN_TOP_ROW_AND_TABLE_BOUNDARY = 15
+    """If top_row.y_1 - table.y_1 is larger than this value, add an additional row"""
+
     def __init__(self, model, pdf_extractor, config=None):
         self.model = model
         self.pdf_extractor = pdf_extractor
@@ -333,6 +336,9 @@ class TableDetector:
 
         row_starts = [ele - self.ROW_START_SHIFT for ele in row_starts]
         rows = []
+
+        if row_starts[0] - y_1 > self.GAP_BETWEEN_TOP_ROW_AND_TABLE_BOUNDARY:
+            row_starts.insert(0, y_1)
 
         for row_start, row_end in zip(row_starts, row_starts[1:] + [y_2]):
             rows.append(lp.Rectangle(x_1, row_start, x_2, row_end))
