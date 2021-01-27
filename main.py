@@ -115,6 +115,20 @@ def obtain_line_id(df, filter, diff_th=6, rho_min=5):
     return lines.groupby("line_id")[["rho", "theta"]].median()
 
 
+def is_valid_table(table_image):
+    height, width = table_image.shape[:2]
+
+    table_image_grey = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
+    _, table_image_bin = cv2.threshold(table_image_grey, 210, 255, cv2.THRESH_BINARY)
+
+    edges = cv2.Canny(table_image_bin, 50, 30)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, int(height * 0.75), None, 0, 0)
+    if lines is None or len(lines) == 0:
+        return False
+
+    return True
+
+
 def detect_vertical_lines(table_image):
 
     height, width = table_image.shape[:2]
@@ -209,23 +223,16 @@ class TableDetector:
         for idx in pbar:
             pbar.set_description(f"Working on page {idx}")
 
-            if isinstance(pdf_images[idx], np.ndarray):
-                height, width = pdf_images[idx].shape[:2]
-            else:
-                width, height = pdf_images[idx].size
             res = self.model.detect(pdf_images[idx])
             detected_tables = [e for e in res if e.type == self.TABLE_TYPE_NAME]
             all_table_region_proposals[idx] = self.post_process_table_region_proposals(
-                detected_tables, width, height
+                detected_tables, pdf_images[idx]
             )
 
         return all_table_region_proposals
 
     def post_process_table_region_proposals(
-        self,
-        table_region_proposals: List,
-        canvas_width: int = None,
-        canvas_height: int = None,
+        self, table_region_proposals: List, pdf_image
     ) -> List:
         """Filter any unreasonable table detection results, includeing:
 
@@ -240,8 +247,17 @@ class TableDetector:
         Returns:
             List: A list of processed table regions
         """
+
+        if isinstance(pdf_image, np.ndarray):
+            canvas_height, canvas_width = pdf_image.shape[:2]
+        else:
+            canvas_width, canvas_height = pdf_image.size
+
         table_region_proposals = [
-            e for e in table_region_proposals if e.width >= self.MIN_TABLE_WIDTH
+            e
+            for e in table_region_proposals
+            if e.width >= self.MIN_TABLE_WIDTH
+            and is_valid_table(e.crop_image(pdf_image))
         ]
 
         # When less than 2 blocks appear in the detected tables, there
@@ -261,10 +277,9 @@ class TableDetector:
             table_region_proposal.block.y_1 = max(
                 table_region_proposal.block.y_1, self.HEADER_HEIGHT
             )
-            if canvas_height is not None:
-                table_region_proposal.block.y_2 = min(
-                    table_region_proposal.block.y_2, canvas_height - self.FOOTER_HEIGHT
-                )
+            table_region_proposal.block.y_2 = min(
+                table_region_proposal.block.y_2, canvas_height - self.FOOTER_HEIGHT
+            )
         return table_region_proposals
 
     def identify_table_columns(
