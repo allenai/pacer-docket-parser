@@ -165,7 +165,9 @@ class TableDetector:
             lambda blocks: reduce(union, blocks),
         )
 
-    def identify_table_columns(self, table: lp.TextBlock) -> List[lp.Rectangle]:
+    def identify_table_columns(
+        self, table: lp.TextBlock, table_tokens: List[lp.TextBlock]
+    ) -> List[lp.Rectangle]:
         """A rule-based methods for identifying table columns:
             It separates the docket table into three columns
             based on the column widths.
@@ -183,14 +185,6 @@ class TableDetector:
         else:
             # Some simple rules for determining column boundaries
             x_1, y_1, x_2, y_2 = table.coordinates
-            col_1_end = x_1 + table.width * 0.145
-            col_2_end = x_1 + table.width * 0.245
-
-            return [
-                lp.Rectangle(x_1, y_1, col_1_end, y_2),
-                lp.Rectangle(col_1_end, y_1, col_2_end, y_2),
-                lp.Rectangle(col_2_end, y_1, x_2, y_2),
-            ]
 
     def identify_table_rows(self, table, columns, table_tokens):
 
@@ -217,7 +211,7 @@ class TableDetector:
 
     def create_table_grid(self, table, table_tokens, filter_text=True):
 
-        columns = self.identify_table_columns(table)
+        columns = self.identify_table_columns(table, table_tokens)
         rows = self.identify_table_rows(table, columns, table_tokens)
         grid = [[intersect(row, column) for column in columns] for row in rows]
         if filter_text:
