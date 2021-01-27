@@ -174,6 +174,10 @@ class TableDetector:
     """The minimum row_height, used for separating different rows"""
     ROW_START_SHIFT = 6.5
     """The distance between the row text top to the row header"""
+    HEADER_HEIGHT = 25
+    """The height of headers, used for trimming table proposal detections"""
+    FOOTER_HEIGHT = 15
+    """The height of headers, used for trimming table proposal detections"""
 
     def __init__(self, model, pdf_extractor, config=None):
         self.model = model
@@ -201,21 +205,31 @@ class TableDetector:
         pbar = tqdm(range(len(pdf_images)))
         for idx in pbar:
             pbar.set_description(f"Working on page {idx}")
+
+            if isinstance(pdf_images[idx], np.ndarray):
+                height, width = pdf_images[idx].shape[:2]
+            else:
+                width, height = pdf_images[idx].size
             res = self.model.detect(pdf_images[idx])
             detected_tables = [e for e in res if e.type == self.TABLE_TYPE_NAME]
             all_table_region_proposals[idx] = self.post_process_table_region_proposals(
-                detected_tables
+                detected_tables, width, height
             )
 
         return all_table_region_proposals
 
-    def post_process_table_region_proposals(self, detected_tables: List) -> List:
+    def post_process_table_region_proposals(
+        self,
+        table_region_proposals: List,
+        canvas_width: int = None,
+        canvas_height: int = None,
+    ) -> List:
         """Filter any unreasonable table detection results, includeing:
 
             1. Extremely narrow blocks
             2. Union block detection results for the same table
                 (determined based on their overlapping levels)
-
+            3. Trim tables if they appear within the
         Args:
             detected_tables (List):
                 A list of table regions for each page
@@ -223,21 +237,32 @@ class TableDetector:
         Returns:
             List: A list of processed table regions
         """
-        detected_tables = [
-            e for e in detected_tables if e.width >= self.MIN_TABLE_WIDTH
+        table_region_proposals = [
+            e for e in table_region_proposals if e.width >= self.MIN_TABLE_WIDTH
         ]
 
         # When less than 2 blocks appear in the detected tables, there
         # could not be overlapping blocks
-        if len(detected_tables) <= 1:
-            return detected_tables
+        if len(table_region_proposals) <= 1:
+            return table_region_proposals
 
-        return non_maximal_supression(
+        table_region_proposals = non_maximal_supression(
             self.MIN_TABLE_OVERLAPPING,
-            detected_tables,
+            table_region_proposals,
             overlapping_coefficient,
             lambda blocks: reduce(union, blocks),
         )
+
+        for table_region_proposal in table_region_proposals:
+
+            table_region_proposal.block.y_1 = max(
+                table_region_proposal.block.y_1, self.HEADER_HEIGHT
+            )
+            if canvas_height is not None:
+                table_region_proposal.block.y_2 = min(
+                    table_region_proposal.block.y_2, canvas_height - self.FOOTER_HEIGHT
+                )
+        return table_region_proposals
 
     def identify_table_columns(
         self, table: lp.TextBlock, table_image: "Image"
