@@ -262,6 +262,15 @@ class TableDetector:
 
         # When less than 2 blocks appear in the detected tables, there
         # could not be overlapping blocks
+
+        for table_region_proposal in table_region_proposals:
+            table_region_proposal.block.y_1 = max(
+                table_region_proposal.block.y_1, self.HEADER_HEIGHT
+            )
+            table_region_proposal.block.y_2 = min(
+                table_region_proposal.block.y_2, canvas_height - self.FOOTER_HEIGHT
+            )
+
         if len(table_region_proposals) <= 1:
             return table_region_proposals
 
@@ -272,14 +281,6 @@ class TableDetector:
             lambda blocks: reduce(union, blocks),
         )
 
-        for table_region_proposal in table_region_proposals:
-
-            table_region_proposal.block.y_1 = max(
-                table_region_proposal.block.y_1, self.HEADER_HEIGHT
-            )
-            table_region_proposal.block.y_2 = min(
-                table_region_proposal.block.y_2, canvas_height - self.FOOTER_HEIGHT
-            )
         return table_region_proposals
 
     def identify_table_columns(
