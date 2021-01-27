@@ -1,8 +1,11 @@
 from typing import List, Union, Dict, Dict, Any, Tuple
 from functools import reduce
+from collections import defaultdict
+from dataclasses import dataclass
 import operator
 
 import layoutparser as lp
+import cv2
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -101,8 +104,60 @@ def non_maximal_supression(
     return grouped_sequence
 
 
-def to_dataframe(grid):
-    return pd.DataFrame([[block.text for block in row] for row in grid])
+def construct_filter(df, column, value, eps=0.1):
+    return df[column].between(value - eps, value + eps)
+
+
+def obtain_line_id(df, filter, diff_th=6, rho_min=5):
+    lines = df[filter].copy().sort_values(by="rho")
+    lines["line_id"] = (lines["rho"].diff(1) > diff_th).cumsum()
+    lines = lines[lines["rho"] > rho_min]
+    return lines.groupby("line_id")[["rho", "theta"]].median()
+
+
+def detect_vertical_lines(table_image):
+
+    height, width = table_image.shape[:2]
+
+    table_image_grey = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
+    _, table_image_bin = cv2.threshold(table_image_grey, 210, 255, cv2.THRESH_BINARY)
+
+    edges = cv2.Canny(table_image_bin, 50, 30)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, int(height * 0.75), None, 0, 0)
+    if lines is None or len(lines) == 0:
+        return None
+    line_table = pd.DataFrame(np.squeeze(lines), columns=["rho", "theta"]).sort_values(
+        by="theta"
+    )
+
+    line_table.loc[
+        (line_table["rho"] < 0) | (line_table["theta"] > np.pi / 2), "theta"
+    ] -= np.pi
+    line_table.loc[line_table["rho"] < 0, "rho"] *= -1
+
+    vertical_filter = construct_filter(line_table, "theta", 0)
+    vertical_lines = obtain_line_id(line_table, vertical_filter)
+    return vertical_lines
+
+
+@dataclass
+class Table:
+    boundary: lp.elements.BaseLayoutElement
+    tokens: List[lp.TextBlock]
+    columns: List[lp.elements.BaseLayoutElement]
+    rows: List[lp.elements.BaseLayoutElement]
+    grid: List[List[lp.TextBlock]]
+
+    @classmethod
+    def from_columns_and_rows(cls, table, tokens, columns, rows):
+        grid = [[intersect(row, column) for column in columns] for row in rows]
+        for row in grid:
+            for block in row:
+                block.text = " ".join(tokens.filter_by(block, center=True).get_texts())
+        return cls(table, tokens, columns, rows, grid)
+
+    def to_dataframe(self):
+        return pd.DataFrame([[block.text for block in row] for row in self.grid])
 
 
 class TableDetector:
@@ -120,22 +175,41 @@ class TableDetector:
     ROW_START_SHIFT = 6.5
     """The distance between the row text top to the row header"""
 
-    def __init__(self, model, config=None):
+    def __init__(self, model, pdf_extractor, config=None):
         self.model = model
+        self.pdf_extractor = pdf_extractor
         self.config = config
 
-    def detect_table_regions(self, pdf_images: List) -> Dict[str, List[lp.TextBlock]]:
-        all_tables = {}
+    def detect_table_region_proposals(
+        self, pdf_images: List
+    ) -> Dict[str, List[lp.TextBlock]]:
+        """Detect possible table regions using DL models
+         and process the detected regions based on self.post_process_table_region_proposals
+
+        Args:
+            pdf_images (List):
+                A list of PDF page images
+
+        Returns:
+            Dict[str, List[lp.TextBlock]]:
+
+                {
+                    "page_id" : [ A list of table table proposals on this page ]
+                }
+        """
+        all_table_region_proposals = {}
         pbar = tqdm(range(len(pdf_images)))
         for idx in pbar:
             pbar.set_description(f"Working on page {idx}")
             res = self.model.detect(pdf_images[idx])
             detected_tables = [e for e in res if e.type == self.TABLE_TYPE_NAME]
-            all_tables[idx] = self.post_processing_tables(detected_tables)
+            all_table_region_proposals[idx] = self.post_process_table_region_proposals(
+                detected_tables
+            )
 
-        return all_tables
+        return all_table_region_proposals
 
-    def post_processing_tables(self, detected_tables: List) -> List:
+    def post_process_table_region_proposals(self, detected_tables: List) -> List:
         """Filter any unreasonable table detection results, includeing:
 
             1. Extremely narrow blocks
@@ -166,28 +240,59 @@ class TableDetector:
         )
 
     def identify_table_columns(
-        self, table: lp.TextBlock, table_tokens: List[lp.TextBlock]
+        self, table: lp.TextBlock, table_image: "Image"
     ) -> List[lp.Rectangle]:
         """A rule-based methods for identifying table columns:
-            It separates the docket table into three columns
-            based on the column widths.
+            It uses line detection methods to search for vertical_lines
+            inside the table region image.
 
         Args:
             table (lp.TextBlock): The table block
 
         Returns:
             List[lp.Rectangle]:
-                A list of rectangles indicating for each column
+                A list of rectangles for each column, ordered from right to left.
         """
         if table.width <= self.MIN_DOCKET_TABLE_WIDTH:
             # If it's a receipt table, we don't generate any columns
             return [table.block]
         else:
-            # Some simple rules for determining column boundaries
-            x_1, y_1, x_2, y_2 = table.coordinates
+            vertical_lines = detect_vertical_lines(table_image)
+            if vertical_lines is None:
+                return None
+            else:
+                x_1, y_1, x_2, y_2 = table.coordinates
+                col_1_end = vertical_lines.iloc[0, 0]
+                col_2_end = vertical_lines.iloc[1, 0]
+                return lp.Layout(
+                    [
+                        lp.Interval(0, col_1_end, axis="x"),
+                        lp.Interval(col_1_end, col_2_end, axis="x"),
+                        lp.Interval(col_2_end, table.width, axis="x"),
+                    ]
+                ).condition_on(table)
 
-    def identify_table_rows(self, table, columns, table_tokens):
+    def identify_table_rows(
+        self,
+        table: lp.TextBlock,
+        columns: List[lp.elements.BaseLayoutElement],
+        table_tokens: List[lp.TextBlock],
+    ) -> List[lp.Rectangle]:
+        """A rule-based methods for identifying table rows:
+        It identifies row_start based on y_1 of tokens inside the
+        left-most columns.
 
+        Args:
+            table (lp.TextBlock): The table block
+            columns (List[lp.elements.BaseLayoutElement]):
+                Table columns detected by self.identify_table_columns
+            table_tokens (List[lp.TextBlock]):
+                All the tokens within the table
+
+        Returns:
+            List[lp.Rectangle]:
+                A list of rectangles for each row, ordered from top to bottom
+        """
         x_1, y_1, x_2, y_2 = table.coordinates
 
         column_one_tokens = table_tokens.filter_by(columns[0], center=True)
@@ -209,17 +314,75 @@ class TableDetector:
 
         return rows
 
-    def create_table_grid(self, table, table_tokens, filter_text=True):
+    def detect_table_from_pdf_page(
+        self,
+        page_tokens: List[lp.TextBlock],
+        page_image: Union["Image", np.ndarray],
+        table_region_proposals: List[lp.TextBlock] = None,
+    ) -> List[Table]:
+        """Detects the tables for a given PDF page
 
-        columns = self.identify_table_columns(table, table_tokens)
-        rows = self.identify_table_rows(table, columns, table_tokens)
-        grid = [[intersect(row, column) for column in columns] for row in rows]
-        if filter_text:
-            for row in grid:
-                for block in row:
-                    block.text = " ".join(
-                        table_tokens.filter_by(block, center=True).get_texts()
-                    )
-        return grid
+        Args:
+            page_tokens (List[lp.TextBlock]):
+                All the tokens within the given page.
+            page_image (Union[PIL.Image, np.ndarray]):
+                The image of the given page.
+            table_region_proposals (List[lp.TextBlock], optional):
+                The table regions proposals of this page detected by
+                self.detect_table_region_proposals.
+                If not set, it will automatically call detect_table_region_proposals
+                to detect the table region proposals.
 
-    # def parse_table_structure(self, table, tokens):
+        Returns:
+            List[Table]:
+                A list of `Table`s.
+        """
+        if not isinstance(page_image, np.ndarray):
+            page_image = np.array(page_image)
+
+        if table_region_proposals is None:
+            table_region_proposals = self.detect_table_region_proposals([page_image])[0]
+
+        tables = []
+        for table in table_region_proposals:
+            table_tokens = page_tokens.filter_by(table, center=True)
+            table_image = np.array(table.crop_image(page_image))
+            table = union_blocks(table_tokens)
+            # Slightly rectify the table region based on the contained tokens
+
+            columns = self.identify_table_columns(table, table_image)
+            if columns is None:  # This is not a valid table, drop it.
+                continue
+
+            rows = self.identify_table_rows(table, columns, table_tokens)
+            table = Table.from_columns_and_rows(table, table_tokens, columns, rows)
+            tables.append(table)
+        return tables
+
+    def detect_tables_from_pdf(self, pdf_filename: str) -> Dict[str, List[Table]]:
+        """Detect tables for all pages from the given pdf_filename
+
+        Args:
+            pdf_filename (str):
+                The pdf filename.
+
+        Returns:
+            Dict[str, List[Table]]:
+                {page_index: all possible tables on this page}
+        """
+        pdf_page_tokens, pdf_images = self.pdf_extractor.load_tokens_and_image(
+            pdf_filename, resize_image=True
+        )
+
+        table_region_proposals = self.detect_table_region_proposals(pdf_images)
+
+        all_tables = {}
+        for idx, tables in table_region_proposals.items():
+            page_tokens = pdf_page_tokens[idx]["token"]
+            page_image = pdf_images[idx]
+
+            all_tables[idx] = self.detect_table_from_pdf_page(
+                page_tokens, page_image, tables
+            )
+
+        return all_tables
