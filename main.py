@@ -3,6 +3,7 @@ from functools import reduce
 from collections import defaultdict
 from dataclasses import dataclass
 import operator
+import argparse
 
 import layoutparser as lp
 import cv2
@@ -11,6 +12,8 @@ import pandas as pd
 from tqdm import tqdm
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
+
+from pdftools import *
 
 
 def union(block1, block2):
@@ -248,10 +251,9 @@ class TableDetector:
             List: A list of processed table regions
         """
 
-        if isinstance(pdf_image, np.ndarray):
-            canvas_height, canvas_width = pdf_image.shape[:2]
-        else:
-            canvas_width, canvas_height = pdf_image.size
+        if not isinstance(pdf_image, np.ndarray):
+            pdf_image = np.array(pdf_image)
+        canvas_height, canvas_width = pdf_image.shape[:2]
 
         table_region_proposals = [
             e
@@ -433,3 +435,43 @@ class TableDetector:
             )
 
         return all_tables
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--filename", type=str, help="PDF filenames for parsing", nargs="+")
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    model = lp.Detectron2LayoutModel(
+        config_path="models/publaynet/mask_rcnn_R_50_FPN_3x/config.yaml",
+        model_path="models/publaynet/mask_rcnn_R_50_FPN_3x/model_final.pth",
+        extra_config=[
+            "MODEL.ROI_HEADS.SCORE_THRESH_TEST",
+            0.2,
+            "MODEL.ROI_HEADS.NMS_THRESH_TEST",
+            0.5,
+        ],
+        label_map={0: "text", 1: "title", 2: "list", 3: "table", 4: "figure"},
+    )
+
+    pdf_extractor = PDFExtractor("pdfplumber")
+    detector = TableDetector(model, pdf_extractor)
+
+    for filename in args.filename:
+        print(f"Processing {filename}")
+        tables = detector.detect_tables_from_pdf(filename)
+
+        all_dfs = [
+            table.to_dataframe()
+            for table in sum([tb for tb in tables.values() if tb != []], [])
+        ]
+
+        columns = all_dfs[0].iloc[0, :].tolist()
+        all_dfs[0].drop([0], inplace=True)
+        df = pd.concat(all_dfs)
+        df.columns = columns
+
+        save_name = filename.replace(".pdf", ".csv")
+        df.to_csv(save_name, index=None)
+        print(f"Saved to {save_name}")
