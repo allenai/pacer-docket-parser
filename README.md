@@ -24,12 +24,22 @@ This project aims to extract information from docket PDF files and store in JSON
 
 ## Usage
 
-1. Use the following command to extract docket tables from a pdf file:
-    ```bash
-    python main.py --filename <filename.pdf>
-    ```
-    It will save the table as `filename.csv`. 
+### Docket Table detection and extraction for PDF
+Use the following command to extract docket tables from a pdf file:
+```bash
+python main.py --filename <filename.pdf>
+```
+It will save the table as `filename.csv`. Please check the exemplar outputs [here](https://drive.google.com/drive/folders/1iG84OfOZ-U9oUiFw75pmyBUO4-6jq01D?usp=sharing). For each PDF, we generate a csv file for the docket table with the same name. The table merges the tables from each page according to the page number. 
 
+
+## TODOS
+
+- [x] Build the PDF table detection module
+    - [x] DL-based PDF table detector 
+    - [x] Table column and row extraction based on line-detection
+    - [x] Multi-page table merging and export
+- [ ] Token extraction 
+- [ ] Save to the unified JSON format
 
 ## Note
 
