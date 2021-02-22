@@ -234,6 +234,7 @@ def load_as_lp_blocks_from_dict(source_data: Dict[str, Any]) -> List[Dict]:
                             y_2=token["y"] + token["height"],
                         ),
                         text=token["text"],
+                        type=token.get("type"),
                     )
                     for token in page_data["tokens"]
                 ]
