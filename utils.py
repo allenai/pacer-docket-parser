@@ -230,8 +230,10 @@ class PlantiffBlock:
 
         else:
             remaining_tokens = regular_tokens
-
-        self.representatives[-1].info_tokens.extend(regular_tokens)
+        
+        if self.representatives:
+            # Somtimes it might be empty 
+            self.representatives[-1].info_tokens.extend(remaining_tokens)
         self.representatives.extend(representatives)
 
 @dataclass
@@ -396,6 +398,10 @@ class PageStructureParser:
                         page_tokens=pdf_tokens[idx])
 
             for plantiff_block_id in range(len(separators)):
+                
+                if separators[plantiff_block_id][0] > separators[plantiff_block_id][1]: 
+                    print(f"Weird separator distribution {separators}")
+                    continue
 
                 page_plantiff_blocks.append(
                     PlantiffBlock.from_page_tokens(
@@ -427,6 +433,7 @@ class PageStructureParser:
 
             bold_tokens = all_bold_tokens[idx]
             if len(bold_tokens) < 1:
+                # Skip for pages without bold tokens
                 continue
 
             possible_underlines = all_possible_underlines[idx]
