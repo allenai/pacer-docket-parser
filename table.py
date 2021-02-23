@@ -1,111 +1,14 @@
 from typing import List, Union, Dict, Dict, Any, Tuple
-from functools import reduce
-from collections import defaultdict
 from dataclasses import dataclass
-import operator
-import argparse
 
 import layoutparser as lp
 import cv2
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import connected_components
 
 from pdftools import *
-
-
-def union(block1, block2):
-    x11, y11, x12, y12 = block1.coordinates
-    x21, y21, x22, y22 = block2.coordinates
-
-    block = lp.Rectangle(min(x11, x21), min(y11, y21), max(x12, x22), max(y12, y22))
-    if isinstance(block1, lp.TextBlock):
-        return lp.TextBlock(
-            block,
-            id=block1.id,
-            type=block1.type,
-            text=block1.text,
-            parent=block1.parent,
-            next=block1.next,
-        )
-    else:
-        return block
-
-
-def union_blocks(blocks):
-    return reduce(union, blocks)
-
-
-def intersect(block1, block2):
-    x11, y11, x12, y12 = block1.coordinates
-    x21, y21, x22, y22 = block2.coordinates
-
-    x1, y1, x2, y2 = max(x11, x21), max(y11, y21), min(x12, x22), min(y12, y22)
-    if x1 > x2 or y1 > y2:
-        return None
-    block = lp.Rectangle(x1, y1, x2, y2)
-    if isinstance(block1, lp.TextBlock):
-        return lp.TextBlock(
-            block,
-            id=block1.id,
-            type=block1.type,
-            text=block1.text,
-            parent=block1.parent,
-            next=block1.next,
-        )
-    else:
-        return block
-
-
-def overlapping_coefficient(block1, block2):
-
-    i = intersect(block1, block2)
-    if i is not None:
-        o_area = max(block1.area, block2.area)
-        return i.area / o_area
-    else:
-        return 0
-
-
-def non_maximal_supression(
-    threshold,
-    sequence,
-    scoring_func,
-    agg_func,
-    bigger_than=True,
-):
-
-    op = operator.gt if bigger_than else operator.lt
-
-    length = len(sequence)
-    graph = np.zeros((length, length))
-    any_connected_components = False
-
-    for i in range(length):
-        for j in range(i + 1, length):
-            if op(scoring_func(sequence[i], sequence[j]), threshold):
-                graph[i][j] = 1
-                any_connected_components = True
-
-    if not any_connected_components:
-        return sequence
-
-    graph = csr_matrix(graph)
-    n_components, labels = connected_components(
-        csgraph=graph, directed=False, return_labels=True
-    )
-
-    grouped_sequence = []
-    for comp_idx in range(n_components):
-        element_idx = np.where(labels == comp_idx)[0]
-        if len(element_idx) == 1:
-            grouped_sequence.append(sequence[element_idx[0]])
-        else:
-            grouped_sequence.append(agg_func([sequence[i] for i in element_idx]))
-    return grouped_sequence
-
+from utils import *
 
 def construct_filter(df, column, value, eps=0.1):
     return df[column].between(value - eps, value + eps)
@@ -435,43 +338,3 @@ class TableDetector:
             )
 
         return all_tables
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--filename", type=str, help="PDF filenames for parsing", nargs="+")
-
-if __name__ == "__main__":
-    args = parser.parse_args()
-
-    model = lp.Detectron2LayoutModel(
-        config_path="models/publaynet/mask_rcnn_R_50_FPN_3x/config.yaml",
-        model_path="models/publaynet/mask_rcnn_R_50_FPN_3x/model_final.pth",
-        extra_config=[
-            "MODEL.ROI_HEADS.SCORE_THRESH_TEST",
-            0.2,
-            "MODEL.ROI_HEADS.NMS_THRESH_TEST",
-            0.5,
-        ],
-        label_map={0: "text", 1: "title", 2: "list", 3: "table", 4: "figure"},
-    )
-
-    pdf_extractor = PDFExtractor("pdfplumber")
-    detector = TableDetector(model, pdf_extractor)
-
-    for filename in args.filename:
-        print(f"Processing {filename}")
-        tables = detector.detect_tables_from_pdf(filename)
-
-        all_dfs = [
-            table.to_dataframe()
-            for table in sum([tb for tb in tables.values() if tb != []], [])
-        ]
-
-        columns = all_dfs[0].iloc[0, :].tolist()
-        all_dfs[0].drop([0], inplace=True)
-        df = pd.concat(all_dfs)
-        df.columns = columns
-
-        save_name = filename.replace(".pdf", ".csv")
-        df.to_csv(save_name, index=None)
-        print(f"Saved to {save_name}")
