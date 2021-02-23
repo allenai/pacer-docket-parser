@@ -363,7 +363,9 @@ class PageStructureParser:
         for idx, underlined_bold_tokens in all_underlined_bold_tokens.items():
 
             # separators = [ele.coordinates[-1] for ele in underlined_bold_tokens]
-
+            if len(underlined_bold_tokens) < 1:
+                continue 
+            
             separators = [
                 [a.coordinates[-1], b.coordinates[1]]
                 for a, b in zip(underlined_bold_tokens, underlined_bold_tokens[1:])
