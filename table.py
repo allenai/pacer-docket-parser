@@ -10,6 +10,7 @@ from tqdm import tqdm
 from pdftools import *
 from utils import *
 
+
 def construct_filter(df, column, value, eps=0.1):
     return df[column].between(value - eps, value + eps)
 
@@ -21,31 +22,23 @@ def obtain_line_id(df, filter, diff_th=6, rho_min=5):
     return lines.groupby("line_id")[["rho", "theta"]].median()
 
 
-def is_valid_table(table_image):
-    height, width = table_image.shape[:2]
-
+def table_line_detector(
+    table_image, length_threshold, target_angle=0, return_exists=False
+):
+    # TODO: build generalized line detector
     table_image_grey = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
     _, table_image_bin = cv2.threshold(table_image_grey, 210, 255, cv2.THRESH_BINARY)
 
     edges = cv2.Canny(table_image_bin, 50, 30)
-    lines = cv2.HoughLines(edges, 1, np.pi / 180, int(height * 0.75), None, 0, 0)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, length_threshold, None, 0, 0)
+
     if lines is None or len(lines) == 0:
-        return False
-
-    return True
-
-
-def detect_vertical_lines(table_image):
-
-    height, width = table_image.shape[:2]
-
-    table_image_grey = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
-    _, table_image_bin = cv2.threshold(table_image_grey, 210, 255, cv2.THRESH_BINARY)
-
-    edges = cv2.Canny(table_image_bin, 50, 30)
-    lines = cv2.HoughLines(edges, 1, np.pi / 180, int(height * 0.75), None, 0, 0)
-    if lines is None or len(lines) == 0:
+        if return_exists:
+            return False
         return None
+    if return_exists:
+        return True
+
     line_table = pd.DataFrame(np.squeeze(lines), columns=["rho", "theta"]).sort_values(
         by="theta"
     )
@@ -55,9 +48,29 @@ def detect_vertical_lines(table_image):
     ] -= np.pi
     line_table.loc[line_table["rho"] < 0, "rho"] *= -1
 
-    vertical_filter = construct_filter(line_table, "theta", 0)
-    vertical_lines = obtain_line_id(line_table, vertical_filter)
-    return vertical_lines
+    line_filter = construct_filter(line_table, "theta", target_angle)
+    valid_lines = obtain_line_id(line_table, line_filter)
+    return valid_lines
+
+
+def detect_vertical_lines(table_image):
+
+    height, width = table_image.shape[:2]
+
+    return table_line_detector(table_image, int(height * 0.75))
+
+
+def detect_horizontal_lines(table_image):
+
+    height, width = table_image.shape[:2]
+
+    return table_line_detector(table_image, int(width * 0.75), target_angle=np.pi / 2)
+
+
+def is_valid_table(table_image):
+    height, width = table_image.shape[:2]
+
+    return table_line_detector(table_image, int(height * 0.75), return_exists=True)
 
 
 @dataclass
@@ -189,7 +202,9 @@ class TableDetector:
         return table_region_proposals
 
     def identify_table_columns(
-        self, table: lp.TextBlock, table_image: "Image"
+        self,
+        table: lp.TextBlock,
+        table_image: np.ndarray,
     ) -> List[lp.Rectangle]:
         """A rule-based methods for identifying table columns:
             It uses line detection methods to search for vertical_lines
@@ -226,6 +241,7 @@ class TableDetector:
         table: lp.TextBlock,
         columns: List[lp.elements.BaseLayoutElement],
         table_tokens: List[lp.TextBlock],
+        table_image: np.ndarray,
     ) -> List[lp.Rectangle]:
         """A rule-based methods for identifying table rows:
         It identifies row_start based on y_1 of tokens inside the
@@ -242,27 +258,51 @@ class TableDetector:
             List[lp.Rectangle]:
                 A list of rectangles for each row, ordered from top to bottom
         """
-        x_1, y_1, x_2, y_2 = table.coordinates
 
-        column_one_tokens = table_tokens.filter_by(columns[0], center=True)
-        row_coordinate_candidates = [tok.coordinates[1] for tok in column_one_tokens]
+        try:
+            horizontal_lines = detect_horizontal_lines(table_image)
+            horizontal_lines = horizontal_lines[horizontal_lines.rho < table.height]
+            if horizontal_lines is None:
+                return None
+            else:
+                all_row_separator = horizontal_lines.rho.tolist()
+                return lp.Layout(
+                    [
+                        lp.Interval(row_start, row_end, axis="y")
+                        for row_start, row_end in zip(
+                            [0] + all_row_separator, all_row_separator + [table.height]
+                        )
+                    ]
+                ).condition_on(table)
 
-        row_starts = non_maximal_supression(
-            5,
-            sorted(row_coordinate_candidates),
-            lambda x1, x2: x2 - x1,
-            np.mean,
-            bigger_than=False,
-        )
+        except:
+            # This is the old version of row detector, which
+            # extracts the row based on the element in the first column,
+            # which might be buggy sometimes.
 
-        row_starts = [ele - self.ROW_START_SHIFT for ele in row_starts]
-        rows = []
+            x_1, y_1, x_2, y_2 = table.coordinates
 
-        if row_starts[0] - y_1 > self.GAP_BETWEEN_TOP_ROW_AND_TABLE_BOUNDARY:
-            row_starts.insert(0, y_1)
+            column_one_tokens = table_tokens.filter_by(columns[0], center=True)
+            row_coordinate_candidates = [
+                tok.coordinates[1] for tok in column_one_tokens
+            ]
 
-        for row_start, row_end in zip(row_starts, row_starts[1:] + [y_2]):
-            rows.append(lp.Rectangle(x_1, row_start, x_2, row_end))
+            row_starts = non_maximal_supression(
+                5,
+                sorted(row_coordinate_candidates),
+                lambda x1, x2: x2 - x1,
+                np.mean,
+                bigger_than=False,
+            )
+
+            row_starts = [ele - self.ROW_START_SHIFT for ele in row_starts]
+            rows = []
+
+            if row_starts[0] - y_1 > self.GAP_BETWEEN_TOP_ROW_AND_TABLE_BOUNDARY:
+                row_starts.insert(0, y_1)
+
+            for row_start, row_end in zip(row_starts, row_starts[1:] + [y_2]):
+                rows.append(lp.Rectangle(x_1, row_start, x_2, row_end))
 
         return rows
 
@@ -298,15 +338,18 @@ class TableDetector:
         tables = []
         for table in table_region_proposals:
             table_tokens = page_tokens.filter_by(table, center=True)
-            table_image = np.array(table.crop_image(page_image))
             table = union_blocks(table_tokens)
+            table_image = np.array(table.crop_image(page_image))
             # Slightly rectify the table region based on the contained tokens
 
             columns = self.identify_table_columns(table, table_image)
             if columns is None:  # This is not a valid table, drop it.
                 continue
 
-            rows = self.identify_table_rows(table, columns, table_tokens)
+            rows = self.identify_table_rows(table, columns, table_tokens, table_image)
+            if rows is None:  # This is not a valid table, drop it.
+                continue
+
             table = Table.from_columns_and_rows(table, table_tokens, columns, rows)
             tables.append(table)
         return tables
