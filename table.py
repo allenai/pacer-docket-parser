@@ -260,22 +260,6 @@ class TableDetector:
         """
 
         try:
-            horizontal_lines = detect_horizontal_lines(table_image)
-            horizontal_lines = horizontal_lines[horizontal_lines.rho < table.height]
-            if horizontal_lines is None:
-                return None
-            else:
-                all_row_separator = horizontal_lines.rho.tolist()
-                return lp.Layout(
-                    [
-                        lp.Interval(row_start, row_end, axis="y")
-                        for row_start, row_end in zip(
-                            [0] + all_row_separator, all_row_separator + [table.height]
-                        )
-                    ]
-                ).condition_on(table)
-
-        except:
             # This is the old version of row detector, which
             # extracts the row based on the element in the first column,
             # which might be buggy sometimes.
@@ -303,6 +287,22 @@ class TableDetector:
 
             for row_start, row_end in zip(row_starts, row_starts[1:] + [y_2]):
                 rows.append(lp.Rectangle(x_1, row_start, x_2, row_end))
+        
+        except:
+            horizontal_lines = detect_horizontal_lines(table_image)
+            horizontal_lines = horizontal_lines[horizontal_lines.rho < table.height]
+            if horizontal_lines is None:
+                return None
+            else:
+                all_row_separator = horizontal_lines.rho.tolist()
+                return lp.Layout(
+                    [
+                        lp.Interval(row_start, row_end, axis="y")
+                        for row_start, row_end in zip(
+                            [0] + all_row_separator, all_row_separator + [table.height]
+                        )
+                    ]
+                ).condition_on(table)
 
         return rows
 

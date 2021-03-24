@@ -289,7 +289,6 @@ class PageStructureParser:
                 [a.coordinates[-1], b.coordinates[1]]
                 for a, b in zip(underlined_bold_tokens, underlined_bold_tokens[1:])
             ]
-            print(separators)
 
             if table_regions[idx]:
                 separators.append(
@@ -305,8 +304,6 @@ class PageStructureParser:
                         pdf_tokens[idx]["height"],
                     ]
                 )
-
-            print(separators)
 
             # width = pdf_tokens[idx]["width"]
             # tokens = pdf_tokens[idx]["tokens"]
@@ -359,6 +356,9 @@ class PageStructureParser:
                 continue
 
             possible_underlines = all_possible_underlines[idx]
+            if len(possible_underlines) < 1:
+                # Skip for pages without underlines
+                continue
 
             matched_token_underlines = self.find_matched_token_underlines(
                 bold_tokens, possible_underlines
