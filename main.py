@@ -33,7 +33,6 @@ def collect_genererated_table_data(tables, hyperlink_tokens):
         
         if len(hyperlinks)==0: 
             table_df[3] = None 
-            continue
         else:
             all_possible_links = [None]* len(table.rows)
             for idx, rows in enumerate(table.grid):
