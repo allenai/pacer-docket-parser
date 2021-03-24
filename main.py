@@ -60,8 +60,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model = lp.Detectron2LayoutModel(
-        config_path="models/publaynet/mask_rcnn_R_50_FPN_3x/config.yaml",
-        model_path="models/publaynet/mask_rcnn_R_50_FPN_3x/model_final.pth",
+        config_path="models/tablebank/faster_rcnn_R_101_FPN_3x/config.yaml",
+        model_path="models/tablebank/faster_rcnn_R_101_FPN_3x/model_final.pth",
         extra_config=[
             "MODEL.ROI_HEADS.SCORE_THRESH_TEST",
             0.2,
