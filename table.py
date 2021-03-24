@@ -64,7 +64,7 @@ def detect_horizontal_lines(table_image):
 
     height, width = table_image.shape[:2]
 
-    return table_line_detector(table_image, int(width * 0.75), target_angle=np.pi / 2)
+    return table_line_detector(table_image, int(width * 0.65), target_angle=np.pi / 2)
 
 
 def is_valid_table(table_image):
