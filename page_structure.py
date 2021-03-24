@@ -359,6 +359,9 @@ class PageStructureParser:
                 continue
 
             possible_underlines = all_possible_underlines[idx]
+            if len(possible_underlines) < 1:
+                # Skip for pages without underlines
+                continue
 
             matched_token_underlines = self.find_matched_token_underlines(
                 bold_tokens, possible_underlines
