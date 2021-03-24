@@ -289,7 +289,6 @@ class PageStructureParser:
                 [a.coordinates[-1], b.coordinates[1]]
                 for a, b in zip(underlined_bold_tokens, underlined_bold_tokens[1:])
             ]
-            print(separators)
 
             if table_regions[idx]:
                 separators.append(
@@ -305,8 +304,6 @@ class PageStructureParser:
                         pdf_tokens[idx]["height"],
                     ]
                 )
-
-            print(separators)
 
             # width = pdf_tokens[idx]["width"]
             # tokens = pdf_tokens[idx]["tokens"]
