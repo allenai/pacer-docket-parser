@@ -63,11 +63,14 @@ class PlantiffBlock:
     name_tokens: lp.TextBlock
     representatives: List
 
-    def get_info(self):
+    def get_info(self, role_mapping: Dict = None):
         block_type = " ".join(ele.text for ele in self.title_tokens)
         party_name = " ".join(ele.text for ele in self.name_tokens)
+        if role_mapping is None:
+            role_mapping = {}
+
         return {
-            "block_type": block_type,
+            "block_type": role_mapping.get(block_type, block_type),
             "block_content": {
                 party_name: [[ele.get_info()] for ele in self.representatives]
             },

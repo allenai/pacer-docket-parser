@@ -1,10 +1,18 @@
 from functools import reduce
 import operator
+import json
 
 import numpy as np
 import layoutparser as lp
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
+
+
+def load_json_record(filepath):
+
+    with open(filepath, "r") as fp:
+        res = json.load(fp)
+    return res
 
 
 def union(block1, block2):
