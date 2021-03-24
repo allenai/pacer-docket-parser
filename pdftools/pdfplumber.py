@@ -19,7 +19,7 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
             width=row["width"],
             y=row["top"],
             height=row["height"],
-            type=row["fontname"]
+            type=row.get("fontname")
         )
 
     def obtain_word_tokens(self, cur_page: pdfplumber.page.Page) -> List[Token]:
@@ -41,6 +41,9 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
             extra_attrs=["fontname", "size"],
         )
 
+        if len(words)==0:
+            return []
+
         df = pd.DataFrame(words)
 
         # Avoid boxes outside the page
@@ -59,11 +62,31 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
         word_tokens = df.apply(self.convert_to_pagetoken, axis=1).tolist()
         return word_tokens
 
-    def extract(self, pdf_path: str) -> List[Page]:
+    def obtain_page_hyperlinks(self, cur_page: pdfplumber.page.Page) -> List[Token]:
+        
+        if len(cur_page.hyperlinks) == 0:
+            return []
+
+        df = pd.DataFrame(cur_page.hyperlinks)
+        df[["x0", "x1"]] = (
+            df[["x0", "x1"]].clip(lower=0, upper=int(cur_page.width)).astype("float")
+        )
+        df[["top", "bottom"]] = (
+            df[["top", "bottom"]]
+            .clip(lower=0, upper=int(cur_page.height))
+            .astype("float")
+        )
+        df[["height", "width"]] = df[["height", "width"]].astype("float")
+        
+        hyperlink_tokens = df.rename(columns={"uri":"text"}).apply(self.convert_to_pagetoken, axis=1).tolist()
+        return hyperlink_tokens
+
+    def extract(self, pdf_path: str, target_data="token") -> List[Page]:
         """Extracts token text, positions, and style information from a PDF file.
         Args:
             pdf_path (str): the path to the pdf file.
             include_lines (bool, optional): Whether to include line tokens. Defaults to False.
+            target_data (str, optional): {"token", "hyperlink"}
         Returns:
             PdfAnnotations: A `PdfAnnotations` containing all the paper token information.
         """
@@ -73,7 +96,10 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
         for page_id in range(len(plumber_pdf_object.pages)):
             cur_page = plumber_pdf_object.pages[page_id]
 
-            tokens = self.obtain_word_tokens(cur_page)
+            if target_data == "token":
+                tokens = self.obtain_word_tokens(cur_page)
+            elif target_data == "hyperlink":
+                tokens = self.obtain_page_hyperlinks(cur_page)
 
             page = dict(
                 page=dict(
