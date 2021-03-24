@@ -68,7 +68,7 @@ if __name__ == "__main__":
             "MODEL.ROI_HEADS.NMS_THRESH_TEST",
             0.5,
         ],
-        label_map={0: "text", 1: "title", 2: "list", 3: "table", 4: "figure"},
+        label_map={0: "table"},
     )
 
     pdf_extractor = PDFExtractor("pdfplumber")
