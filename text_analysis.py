@@ -6,18 +6,19 @@ re_fdate = re.compile('Date Filed: [0-9]{2}/[0-9]{2}/[0-9]{4}')
 re_tdate = re.compile('Date Terminated: [0-9]{2}/[0-9]{2}/[0-9]{4}')
 re_judge = re.compile('Assigned to: [ A-Za-z\'\.\,\-\\\\]{1,100}')
 re_referred_judge = re.compile('Referred to: [ A-Za-z\'\.\,\-\\\\]{1,100}')
-re_cr_title = re.compile('Case title: [ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100}')
-re_cv_title = re.compile('(\<br( \/)?\>|\))([^(][ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100} v.? |(I|i)n (R|r)e:?)[ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100}(\<|\()')
 re_nature = re.compile('Nature of Suit: [A-Za-z0-9 :()\.]{1,100}')
 re_jury = re.compile('Jury Demand: [A-Za-z0-9 :(\.)]{1,100}')
 re_cause = re.compile('Cause: [A-Za-z0-9 :(\.)]{1,100}')
 re_jurisdiction = re.compile('Jurisdiction: [A-Za-z0-9 :(\.)]{1,100}')
-re_lead_case_id = re.compile('Lead case: <a href=[^>]*>[A-Za-z0-9:-]{1,100}')
+re_lead_case_id = re.compile('Lead case: [A-Za-z0-9:-]{1,100}')
 re_demand = re.compile('Demand: [0-9\,\$]{1,100}')
 re_other_court = re.compile('Case in other court: [A-Za-z0-9 :;()\.\,\-]{1,100}') # brittle but functional
-re_party = re.compile('<b><u>([A-Za-z\- ]{1,100})(?:</u|\()')
 re_header_case_id = re.compile('DOCKET FOR CASE #: [A-Za-z0-9 :\-]{1,100}')
 
+# Used 
+re_party = re.compile('<b><u>([A-Za-z\- ]{1,100})(?:</u|\()')
+re_cr_title = re.compile('Case title: [ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100}')
+re_cv_title = re.compile('(\<br( \/)?\>|\))([^(][ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100} v.? |(I|i)n (R|r)e:?)[ A-Za-z0-9#&;()\'\.\,\-\$\/\\\\]{1,100}(\<|\()')
 
 def generic_re_existence_helper(obj, split_text, index):
     if obj != None:
