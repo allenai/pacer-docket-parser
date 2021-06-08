@@ -1,6 +1,6 @@
-# The Docket PDF Parsing Project 
+# PACER Docket PDF Parser
 
-This project aims to extract information from docket PDF files and store in JSON formats specified [here](https://github.com/scales-okn/PACER-tools/tree/master/code/parsers#json-schema).
+This project aims to extract structured information from PACER docket PDF files and store in JSON formats specified [here](https://github.com/scales-okn/PACER-tools/tree/master/code/parsers#json-schema).
 
 ## Installation
 
@@ -40,7 +40,3 @@ It will save the table as `filename.csv`. Please check the exemplar outputs [her
     - [x] Multi-page table merging and export
 - [ ] Token extraction 
 - [ ] Save to the unified JSON format
-
-## Note
-
-The PDF extraction utility is directly copied from [allenai/scienceparseplus](https://github.com/allenai/scienceparseplus/tree/main/src/scienceparseplus/pdftools).
