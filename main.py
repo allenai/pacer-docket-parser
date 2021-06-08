@@ -59,8 +59,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model = lp.Detectron2LayoutModel(
-        config_path="models/tablebank/faster_rcnn_R_101_FPN_3x/config.yaml",
-        model_path="models/tablebank/faster_rcnn_R_101_FPN_3x/model_final.pth",
+        "lp://TableBank/faster_rcnn_R_101_FPN_3x/config",
         extra_config=[
             "MODEL.ROI_HEADS.SCORE_THRESH_TEST",
             0.2,
