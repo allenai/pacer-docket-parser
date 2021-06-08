@@ -4,10 +4,7 @@ torchvision>=0.6.0
 pandas 
 
 # For visual layout detection libraries - to remove 
-layoutparser==0.1.2
-
-# For textual laytout detection - LayoutLM
-transformers==4.0.0
+layoutparser>=0.2
 
 # For extracting PDF and images from the input
 pdfplumber
