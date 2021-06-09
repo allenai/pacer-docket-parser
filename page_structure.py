@@ -4,6 +4,7 @@ import operator
 from functools import reduce, partial
 from dataclasses import dataclass
 from collections import defaultdict
+import itertools
 
 import pdfplumber
 import numpy as np
@@ -376,3 +377,21 @@ class PageStructureParser:
         )
 
         return all_plantiffs_blocks
+
+    def fetch_case_flags(self, filename, upper_rule_ratio=0.045, bottom_rule_ratio=0.07):
+        """A simple rule-based method for fetching the case flags. 
+        Right now it selects tokens inside a manually specified "band" on the first page, and 
+        treat them as the case_flags. 
+        """
+        pdf_tokens = self.pdf_extractor.pdf_extractor.extract(filename)[0] # Only check the first page
+        height = pdf_tokens["height"]
+
+        case_flag_region = lp.Interval(int(height*upper_rule_ratio),int(height*bottom_rule_ratio), axis='y')
+        case_flag_tokens = pdf_tokens['tokens'].filter_by(case_flag_region, center=True)
+        case_flags = [token.text.strip().rstrip(", ") for token in case_flag_tokens]
+
+        case_flags = list(itertools.chain.from_iterable([case_flag.split(",") for case_flag in case_flags]))
+        # Sometimes the pdf-parser does not split the text based at ",", and we have to manually do it
+
+        return case_flags
+        
