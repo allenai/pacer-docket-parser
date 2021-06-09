@@ -1,5 +1,6 @@
 import re
 import fitz
+import support.docket_entry_identification as dei
 
 # Resuing functions from  https://github.com/scales-okn/PACER-tools/blob/5a170f900df41e6395507023d52069bd24a3ce5f/code/parsers/parse_pacer.py
 re_fdate = re.compile('Date Filed: [0-9]{2}/[0-9]{2}/[0-9]{4}')
@@ -49,6 +50,33 @@ def line_cleaner(string):
     else:
         return None
 
+def get_mdl_code(case_data):
+    '''
+    Get the mdl code if present
+    The same as https://github.com/scales-okn/PACER-tools/blob/5a170f900df41e6395507023d52069bd24a3ce5f/code/parsers/parse_pacer.py#L362
+
+    Inputs:
+        - case_data (dict): the rest of the case_data
+    Outputs:
+        - mdl_code (int): the case no for the mdl
+        - mdl_id_source (str): the source of the identification of the code
+    '''
+
+    # Check lead case
+    lead_case_id = case_data.get('lead_case_id')
+    if lead_case_id:
+        code = dei.mdl_code_from_casename(lead_case_id)
+        if code:
+            return (code, 'lead_case_id')
+
+    # Check flags
+    for flag in case_data.get('case_flags') or []:
+        code = dei.mdl_code_from_string(flag)
+        if code:
+            return (code, 'flag')
+
+    return (None,None)
+
 
 def raw_text_parse(filename):
     
@@ -75,5 +103,11 @@ def raw_text_parse(filename):
     case_data['monetary_demand'] = generic_re_existence_helper( re_demand.search(doc_text), 'Demand: ', -1)
     case_data['lead_case_id'] = generic_re_existence_helper( re_lead_case_id.search(doc_text), 'Lead case: ', -1)
     case_data['other_court'] = generic_re_existence_helper( re_other_court.search(doc_text), '&nbsp;', -1)
+
+    # add mdl extraction
+    case_data['mdl_code'] , case_data['mdl_id_source'] = get_mdl_code(case_data)
+    # Is an mdl if we have a code OR if an 'MDL' or 'MDL_<description>' flag exists
+    case_data['is_mdl'] = bool(case_data['mdl_code']) or any(f.lower().startswith('mdl') for f in case_data['case_flags'])
+    case_data['is_multi'] = any( (case_data['is_mdl'], bool(case_data['lead_case_id']), bool(case_data['member_case_key']), bool(case_data['other_court'])) )
 
     return case_data

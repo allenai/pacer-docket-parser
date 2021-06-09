@@ -87,6 +87,7 @@ if __name__ == "__main__":
             case_json = raw_text_parse(filename)
             case_json['docket'] = df.apply(lambda row: row.to_list(), axis=1).to_list()
             case_json.update(all_plantiffs_data)
+            case_json['case_flags'] = page_parser.fetch_case_flags(filename=filename)
 
             table_save_name = filename.replace(".pdf", ".csv")
             df.to_csv(table_save_name, index=None)
