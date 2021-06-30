@@ -39,29 +39,29 @@ def parse_all(
         if os.path.exists(pdf_file.replace(".pdf", ".json")):
             continue
         
-        # try:
-        docket_df, case_json = docket_parser.parse(pdf_file)
-    
-        case_json["docket"] = docket_df.apply(
-            lambda row: row.to_list(), axis=1
-        ).to_list()
-
-        table_save_name = pdf_file.replace(".pdf", ".csv")
-        json_save_name = pdf_file.replace(".pdf", ".json")
-        if save_path is not None:
-            table_save_name = os.path.join(save_path, os.path.basename(table_save_name))
-            json_save_name = os.path.join(save_path, os.path.basename(json_save_name))
-        pbar.set_description(f"Saved to {table_save_name}")
+        try:
+            docket_df, case_json = docket_parser.parse(pdf_file)
         
-        docket_df.to_csv(table_save_name, index=None)
-        with open(json_save_name, 'w') as fp:
-            json.dump(case_json, fp, indent=4)
-        pbar.set_description(f"Saved to {json_save_name}")
+            case_json["docket"] = docket_df.apply(
+                lambda row: row.to_list(), axis=1
+            ).to_list()
 
-        # except KeyboardInterrupt:
-        #     exit()
-        # except:
-        #     print(f"Serious issue for {pdf_file}")
+            table_save_name = pdf_file.replace(".pdf", ".csv")
+            json_save_name = pdf_file.replace(".pdf", ".json")
+            if save_path is not None:
+                table_save_name = os.path.join(save_path, os.path.basename(table_save_name))
+                json_save_name = os.path.join(save_path, os.path.basename(json_save_name))
+            pbar.set_description(f"Saved to {table_save_name}")
+            
+            docket_df.to_csv(table_save_name, index=None)
+            with open(json_save_name, 'w') as fp:
+                json.dump(case_json, fp, indent=4)
+            pbar.set_description(f"Saved to {json_save_name}")
+
+        except KeyboardInterrupt:
+            exit()
+        except:
+            print(f"Serious issue for {pdf_file}")
 
 if __name__ == '__main__':
     parse_all()
