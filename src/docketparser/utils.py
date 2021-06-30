@@ -14,6 +14,10 @@ def load_json_record(filepath):
         res = json.load(fp)
     return res
 
+def save_json_record(data, filepath):
+
+    with open(filepath, "w") as fp:
+        json.dump(data, fp)
 
 def union(block1, block2):
     x11, y11, x12, y12 = block1.coordinates
