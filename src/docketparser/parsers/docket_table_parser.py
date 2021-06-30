@@ -391,7 +391,7 @@ class TableParser:
             pdf_filename, resize_image=True
         )
 
-        return self.detect_tables_from_pdf_data(pdf_tokens, pdf_images)
+        return self.parse_tables_from_pdf_data(pdf_tokens, pdf_images)
 
     def parse_tables_from_pdf_data(
         self, pdf_tokens: PDFPage, pdf_images: List["Image"]
