@@ -44,7 +44,7 @@ class MainParser:
             hyperlinks = pdf_tokens[page_id].url_tokens
 
             if len(hyperlinks) == 0:
-                table_df[3] = None
+                table_df[3] = ""
             else:
                 all_possible_links = [None] * len(table.rows)
                 for idx, rows in enumerate(table.grid):

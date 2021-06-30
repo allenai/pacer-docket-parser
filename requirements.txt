@@ -2,6 +2,7 @@ torch>=1.5
 torchvision>=0.6.0
 
 pandas 
+click>=6.7
 
 # For visual layout detection libraries - to remove 
 layoutparser>=0.2
@@ -12,6 +13,3 @@ pdf2image
 
 # Progress bar
 tqdm
-
-# PyMuPDF
-PyMuPDF

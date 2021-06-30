@@ -1,0 +1,35 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="docketparser",
+    version="0.1.0",
+    description="Docket-Parser - Parsing PACER Docket PDF files with ease",
+    packages=find_packages("src"),
+    package_dir  = {"": "src"},
+    long_description=open("README.md", "r", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/allenai/pacer-docket-parser",
+    author="Shannon Shen",
+    author_email="shannons@allenai.org",
+    keywords="",
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Programming Language :: Python :: 3.6",
+        "License :: OSI Approved :: Apache Software License",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    ],
+    license="Apache 2.0",
+    install_requires=[
+        "click>=6.7",
+        "pandas", 
+        "layoutparser>=0.2",
+        "pdfplumber",
+        "pdf2image==1.14.0",
+        "tqdm",
+    ],
+    python_requires=">=3.6",
+    entry_points={"console_scripts": ["docketparser=docketparser.__main__:docketparser_cli"]},
+    zip_safe=False,
+)
