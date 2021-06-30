@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from pdftools import *
-from utils import *
+from ..pdftools import *
+from ..utils import *
+from ..datamodel import *
 
 
 def construct_filter(df, column, value, eps=0.1):
@@ -115,9 +116,26 @@ class TableDetector:
     GAP_BETWEEN_TOP_ROW_AND_TABLE_BOUNDARY = 15
     """If top_row.y_1 - table.y_1 is larger than this value, add an additional row"""
 
-    def __init__(self, model, pdf_extractor, config=None):
+    def __init__(self, model=None, pdf_extractor=None, config=None):
+        
+        if model is None:
+            # By default, it will use a table detector trained on tablebank 
+            model = lp.Detectron2LayoutModel(
+                "lp://TableBank/faster_rcnn_R_101_FPN_3x/config",
+                extra_config=[
+                    "MODEL.ROI_HEADS.SCORE_THRESH_TEST",
+                    0.2,
+                    "MODEL.ROI_HEADS.NMS_THRESH_TEST",
+                    0.5,
+                ],
+                label_map={0: "table"},
+            )
         self.model = model
+
+        if pdf_extractor is None:
+            pdf_extractor = PDFExtractor("pdfplumber")
         self.pdf_extractor = pdf_extractor
+        
         self.config = config
 
     def detect_table_region_proposals(
@@ -369,15 +387,21 @@ class TableDetector:
             Dict[str, List[Table]]:
                 {page_index: all possible tables on this page}
         """
-        pdf_page_tokens, pdf_images = self.pdf_extractor.load_tokens_and_image(
+        pdf_tokens, pdf_images = self.pdf_extractor.load_tokens_and_image(
             pdf_filename, resize_image=True
         )
+
+        return self.detect_tables_from_pdf_data(pdf_tokens, pdf_images)
+
+    def detect_tables_from_pdf_data(
+        self, pdf_tokens: PDFPage, pdf_images: List["Image"]
+    ) -> Dict[str, List[Table]]:
 
         table_region_proposals = self.detect_table_region_proposals(pdf_images)
 
         all_tables = {}
         for idx, tables in table_region_proposals.items():
-            page_tokens = pdf_page_tokens[idx]["tokens"]
+            page_tokens = pdf_tokens[idx].tokens
             page_image = pdf_images[idx]
 
             all_tables[idx] = self.detect_table_from_pdf_page(
