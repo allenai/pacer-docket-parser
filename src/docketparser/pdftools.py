@@ -35,14 +35,17 @@ def load_page_data_from_dict(source_data: Dict[str, Any]) -> List[Dict]:
             width=page_data["page"]["width"],
             tokens=convert_token_dict_to_layout(page_data["tokens"]),
             url_tokens=convert_token_dict_to_layout(page_data["url_tokens"]),
-            lines=[
-                lp.Rectangle(
-                    x_1=line["x"],
-                    y_1=line["y"],
-                    x_2=line["x"] + line["width"],
-                    y_2=line["y"] + line["height"],
-                ) for line in page_data["lines"]
-            ]
+            lines=lp.Layout(
+                [
+                    lp.Rectangle(
+                        x_1=line["x"],
+                        y_1=line["y"],
+                        x_2=line["x"] + line["width"],
+                        y_2=line["y"] + line["height"],
+                    )
+                    for line in page_data["lines"]
+                ]
+            ),
         )
         for page_data in source_data
     ]
@@ -155,10 +158,10 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
         page_objs = cur_page.rects + cur_page.lines
         possible_underlines = [
             dict(
-                x = float(ele["x0"]),
-                y = height - float(ele["y0"]),
-                height = float(ele['height']),
-                width = float(ele['width']),
+                x=float(ele["x0"]),
+                y=height - float(ele["y0"]),
+                height=float(ele["height"]),
+                width=float(ele["width"]),
             )
             for ele in filter(
                 lambda obj: obj["height"] < self.UNDERLINE_HEIGHT_THRESHOLD

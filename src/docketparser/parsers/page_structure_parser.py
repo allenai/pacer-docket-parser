@@ -13,8 +13,9 @@ from scipy.spatial.distance import cdist
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
-from pdftools import PDFExtractor
-from utils import *
+from ..datamodel import PDFPage
+from ..pdftools import PDFExtractor
+from ..utils import *
 
 
 def analyze_right_tokens(right_tokens: List) -> Tuple[List, List]:
@@ -42,8 +43,8 @@ def analyze_right_tokens(right_tokens: List) -> Tuple[List, List]:
 
 def split_page_tokens(boundary, page_tokens):
 
-    width = page_tokens["width"]
-    tokens = page_tokens["tokens"]
+    width = page_tokens.width
+    tokens = page_tokens.tokens
 
     start, end = boundary
 
@@ -176,10 +177,6 @@ class PageStructureParser:
     FRONT_PAGE_HEADER_RATIO = 0.2
     # For the front page, the "header" of the document before the possible plantiff
 
-    UNDERLINE_WIDTH_THRESHOLD = 100
-    UNDERLINE_HEIGHT_THRESHOLD = 3
-    # Defines what a regular underline should look like
-
     TOKEN_UNDERLINE_DISTANCE_MAX = 10
     # Used for match token with possible underlines
 
@@ -194,27 +191,34 @@ class PageStructureParser:
 
     def remove_header_and_footer_tokens(self, pdf_tokens: List) -> List:
 
-        pdf_tokens = deepcopy(pdf_tokens)
-
+        new_pdf_tokens = []
         for pdf_token in pdf_tokens:
 
-            height = pdf_token["height"]
-            tokens = pdf_token["tokens"]
-
-            pdf_token["tokens"] = tokens.filter_by(
-                lp.Interval(
-                    height * self.HEADER_RATIO, height * self.FOOTER_RATIO, axis="y"
+            height = pdf_token.height
+            new_pdf_tokens.append(
+                PDFPage(
+                    height = pdf_token.height,
+                    width = pdf_token.width,
+                    tokens = pdf_token.tokens.filter_by(
+                        lp.Interval(
+                            height * self.HEADER_RATIO, height * self.FOOTER_RATIO, axis="y"
+                        )
+                    ),
+                    lines = pdf_token.lines.filter_by(
+                        lp.Interval(
+                            height * self.HEADER_RATIO, height * self.FOOTER_RATIO, axis="y"
+                        )
+                    ),
                 )
             )
-
-        return pdf_tokens
+        return new_pdf_tokens
 
     def find_bold_tokens(self, pdf_tokens: List) -> List:
 
         all_bold_tokens = []
         for page_idx in range(len(pdf_tokens)):
-            tokens = pdf_tokens[page_idx]["tokens"]
-            height = pdf_tokens[page_idx]["height"]
+            tokens = pdf_tokens[page_idx].tokens
+            height = pdf_tokens[page_idx].height
             if page_idx == 0:
                 tokens = tokens.filter_by(
                     lp.Interval(height * self.FRONT_PAGE_HEADER_RATIO, height, axis="y")
@@ -223,34 +227,6 @@ class PageStructureParser:
             all_bold_tokens.append(bold_tokens)
 
         return all_bold_tokens
-
-    def find_possible_underlines(self, pdf_object) -> List:
-
-        all_possible_underlines = []
-        for page_idx in range(len(pdf_object.pages)):
-
-            height = float(pdf_object.pages[page_idx].height)
-
-            page_objs = (
-                pdf_object.pages[page_idx].rects + pdf_object.pages[page_idx].lines
-            )
-
-            possible_underlines = [
-                lp.Rectangle(
-                    float(ele["x0"]),
-                    height - float(ele["y0"]),
-                    float(ele["x1"]),
-                    height - float(ele["y1"]),
-                )
-                for ele in filter(
-                    lambda obj: obj["height"] < self.UNDERLINE_HEIGHT_THRESHOLD
-                    and obj["width"] < self.UNDERLINE_WIDTH_THRESHOLD,
-                    page_objs,
-                )
-            ]
-            all_possible_underlines.append(possible_underlines)
-
-        return all_possible_underlines
 
     def find_matched_token_underlines(
         self, bold_tokens: List, possible_underlines: List
@@ -302,7 +278,7 @@ class PageStructureParser:
                 separators.append(
                     [
                         underlined_bold_tokens[-1].coordinates[-1],
-                        pdf_tokens[idx]["height"],
+                        pdf_tokens[idx].height,
                     ]
                 )
 
@@ -335,21 +311,24 @@ class PageStructureParser:
 
         return all_plantiffs_blocks
 
-    def parse_page_structure(self, filename, table_regions=None):
+    def parse_page_structure_from_pdf(self, filename, table_regions=None):
 
         pdf_tokens = self.pdf_extractor.pdf_extractor.extract(filename)
+        return self.parse_page_structure(pdf_tokens, table_regions)
+
+    def parse_page_structure(self, pdf_tokens, table_regions=None):
+
         pdf_tokens = self.remove_header_and_footer_tokens(pdf_tokens)
-        pdf_object = pdfplumber.open(filename)
 
         if table_regions is None:
             table_regions = {}
 
-        all_possible_underlines = self.find_possible_underlines(pdf_object)
+        all_possible_underlines = [page.lines for page in pdf_tokens]
         all_bold_tokens = self.find_bold_tokens(pdf_tokens)
 
         all_underlined_bold_tokens = {}
 
-        for idx in range(len(pdf_object.pages)):
+        for idx in range(len(pdf_tokens)):
 
             bold_tokens = all_bold_tokens[idx]
             if len(bold_tokens) < 1:
@@ -378,16 +357,16 @@ class PageStructureParser:
 
         return all_plantiffs_blocks
 
-    def fetch_case_flags(self, filename, upper_rule_ratio=0.045, bottom_rule_ratio=0.07):
+    def fetch_case_flags(self, pdf_tokens, upper_rule_ratio=0.045, bottom_rule_ratio=0.07):
         """A simple rule-based method for fetching the case flags. 
         Right now it selects tokens inside a manually specified "band" on the first page, and 
         treat them as the case_flags. 
         """
-        pdf_tokens = self.pdf_extractor.pdf_extractor.extract(filename)[0] # Only check the first page
-        height = pdf_tokens["height"]
+        pdf_page = pdf_tokens[0] # Only check the first page
+        height = pdf_page.height
 
         case_flag_region = lp.Interval(int(height*upper_rule_ratio),int(height*bottom_rule_ratio), axis='y')
-        case_flag_tokens = pdf_tokens['tokens'].filter_by(case_flag_region, center=True)
+        case_flag_tokens = pdf_page.tokens.filter_by(case_flag_region, center=True)
         case_flags = [token.text.strip().rstrip(", ") for token in case_flag_tokens]
 
         case_flags = list(itertools.chain.from_iterable([case_flag.split(",") for case_flag in case_flags]))
