@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union, List
 
 import layoutparser as lp
@@ -9,7 +9,8 @@ class PDFPage:
     height: Union[float, int]
     width: Union[float, int]
     tokens: lp.Layout
-    url_tokens: lp.Layout
+    url_tokens: lp.Layout = field(default_factory=list)
+    lines: lp.Layout = field(default_factory=list)
 
     def get_text_segments(self, x_tolerance=10, y_tolerance=10) -> List[List]:
         """Get text segments from the current page.

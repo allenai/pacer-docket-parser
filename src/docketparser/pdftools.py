@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 import pdfplumber
 import layoutparser as lp
+import pdf2image
 
 from .datamodel import *
 
@@ -34,6 +35,17 @@ def load_page_data_from_dict(source_data: Dict[str, Any]) -> List[Dict]:
             width=page_data["page"]["width"],
             tokens=convert_token_dict_to_layout(page_data["tokens"]),
             url_tokens=convert_token_dict_to_layout(page_data["url_tokens"]),
+            lines=lp.Layout(
+                [
+                    lp.Rectangle(
+                        x_1=line["x"],
+                        y_1=line["y"],
+                        x_2=line["x"] + line["width"],
+                        y_2=line["y"] + line["height"],
+                    )
+                    for line in page_data["lines"]
+                ]
+            ),
         )
         for page_data in source_data
     ]
@@ -60,6 +72,10 @@ class BasePDFTokenExtractor(ABC):
 
 class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
     NAME = "pdfplumber"
+
+    UNDERLINE_HEIGHT_THRESHOLD = 3
+    UNDERLINE_WIDTH_THRESHOLD = 100
+    # Defines what a regular underline should look like
 
     @staticmethod
     def convert_to_pagetoken(row: pd.Series) -> Dict:
@@ -136,6 +152,25 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
         )
         return hyperlink_tokens
 
+    def obtain_page_lines(self, cur_page: pdfplumber.page.Page) -> List[Dict]:
+
+        height = float(cur_page.height)
+        page_objs = cur_page.rects + cur_page.lines
+        possible_underlines = [
+            dict(
+                x=float(ele["x0"]),
+                y=height - float(ele["y0"]),
+                height=float(ele["height"]),
+                width=float(ele["width"]),
+            )
+            for ele in filter(
+                lambda obj: obj["height"] < self.UNDERLINE_HEIGHT_THRESHOLD
+                and obj["width"] < self.UNDERLINE_WIDTH_THRESHOLD,
+                page_objs,
+            )
+        ]
+        return possible_underlines
+
     def extract(self, pdf_path: str) -> List[Dict]:
         """Extracts token text, positions, and style information from a PDF file.
         Args:
@@ -153,6 +188,7 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
 
             tokens = self.obtain_word_tokens(cur_page)
             url_tokens = self.obtain_page_hyperlinks(cur_page)
+            lines = self.obtain_page_lines(cur_page)
 
             page = dict(
                 page=dict(
@@ -162,7 +198,53 @@ class PDFPlumberTokenExtractor(BasePDFTokenExtractor):
                 ),
                 tokens=tokens,
                 url_tokens=url_tokens,
+                lines=lines,
             )
             pages.append(page)
 
         return load_page_data_from_dict(pages)
+
+
+class PDFExtractor:
+    """PDF Extractor will load both images and layouts for PDF documents for downstream processing."""
+
+    def __init__(self, pdf_extractor_name, **kwargs):
+
+        self.pdf_extractor_name = pdf_extractor_name.lower()
+
+        if self.pdf_extractor_name == PDFPlumberTokenExtractor.NAME:
+            self.pdf_extractor = PDFPlumberTokenExtractor(**kwargs)
+        else:
+            raise NotImplementedError(
+                f"Unknown pdf_extractor_name {pdf_extractor_name}"
+            )
+
+    def load_tokens_and_image(
+        self, pdf_path: str, resize_image=False, resize_layout=False, **kwargs
+    ):
+
+        pdf_tokens = self.pdf_extractor(pdf_path, **kwargs)
+
+        page_images = pdf2image.convert_from_path(pdf_path, dpi=72)
+
+        assert not (
+            resize_image and resize_layout
+        ), "You could not resize image and layout simultaneously."
+
+        if resize_layout:
+            for image, page in zip(page_images, pdf_tokens):
+                width, height = image.size
+                resize_factor = width / page.width, height / page.height
+                page.tokens = page.tokens.scale(resize_factor)
+                page.image_height = height
+                page.image_width = width
+
+        elif resize_image:
+            page_images = [
+                image.resize((int(page.width), int(page.height)))
+                if page.width != image.size[0]
+                else image
+                for image, page in zip(page_images, pdf_tokens)
+            ]
+
+        return pdf_tokens, page_images
