@@ -10,6 +10,7 @@ class PDFPage:
     width: Union[float, int]
     tokens: lp.Layout
     url_tokens: lp.Layout
+    lines: List[lp.Rectangle]
 
     def get_text_segments(self, x_tolerance=10, y_tolerance=10) -> List[List]:
         """Get text segments from the current page.
