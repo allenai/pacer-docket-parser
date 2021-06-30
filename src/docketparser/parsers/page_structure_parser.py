@@ -316,7 +316,7 @@ class PageStructureParser:
         pdf_tokens = self.pdf_extractor.pdf_extractor.extract(filename)
         return self.parse_page_structure(pdf_tokens, table_regions)
 
-    def parse_page_structure(self, pdf_tokens, table_regions=None):
+    def parse_page_structure_from_pdf_data(self, pdf_tokens, table_regions=None):
 
         pdf_tokens = self.remove_header_and_footer_tokens(pdf_tokens)
 
@@ -357,7 +357,7 @@ class PageStructureParser:
 
         return all_plantiffs_blocks
 
-    def fetch_case_flags(self, pdf_tokens, upper_rule_ratio=0.045, bottom_rule_ratio=0.07):
+    def parse_case_flags(self, pdf_tokens, upper_rule_ratio=0.045, bottom_rule_ratio=0.07):
         """A simple rule-based method for fetching the case flags. 
         Right now it selects tokens inside a manually specified "band" on the first page, and 
         treat them as the case_flags. 

@@ -94,7 +94,7 @@ class Table:
         return pd.DataFrame([[block.text for block in row] for row in self.grid])
 
 
-class TableDetector:
+class TableParser:
 
     TABLE_TYPE_NAME = "table"
 
@@ -376,7 +376,7 @@ class TableDetector:
             tables.append(table)
         return tables
 
-    def detect_tables_from_pdf(self, pdf_filename: str) -> Dict[str, List[Table]]:
+    def parse_tables_from_pdf(self, pdf_filename: str) -> Dict[str, List[Table]]:
         """Detect tables for all pages from the given pdf_filename
 
         Args:
@@ -393,7 +393,7 @@ class TableDetector:
 
         return self.detect_tables_from_pdf_data(pdf_tokens, pdf_images)
 
-    def detect_tables_from_pdf_data(
+    def parse_tables_from_pdf_data(
         self, pdf_tokens: PDFPage, pdf_images: List["Image"]
     ) -> Dict[str, List[Table]]:
 
